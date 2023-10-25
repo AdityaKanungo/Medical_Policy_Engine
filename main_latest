@@ -1,0 +1,64 @@
+import streamlit as st
+import pdfplumber
+import openai
+
+# Set your OpenAI API key
+openai.api_key = ''
+
+def process_pdf(file):
+    with pdfplumber.open(file) as pdf:
+        text = ""
+        for page in pdf.pages:
+            text += page.extract_text() + "\n\n"
+    return text
+
+def query_openai_api(query, full_text):
+    chunk_size = 4096 - len(query) - 100  # Adjusted for extra text in prompt
+    start = 0
+    end = start + chunk_size
+    
+    while start < len(full_text):
+        text_chunk = full_text[start:end]
+        prompt = f"""
+        You are a helpful assistant. Based on the document provided below, 
+        answer the following query with a detailed response. Include specific information 
+        from the document and mention the part of the document that your answer is based on.
+
+        Make sure that the output generated is at least 500 words
+
+        Document:\n{text_chunk}\n\nQuery: {query}\nAnswer:"""
+        
+        response = openai.Completion.create(
+            model="text-davinci-002",
+            prompt=prompt,
+            temperature=0.5,
+            max_tokens=2500  # Adjust as needed
+        )
+        
+        answer = response.choices[0].text.strip()
+        if answer and len(answer.split()) > 3:  # Check for a minimum answer length
+            return answer
+        
+        # Move to the next chunk
+        start += chunk_size
+        end = start + chunk_size
+    
+    return "I couldn't find a detailed answer in the document. Please try rephrasing your question or check if the document is relevant."
+
+
+
+def main():
+    st.title("Medicare Document Interaction")
+    
+    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+    
+    if uploaded_file is not None:
+        full_text = process_pdf(uploaded_file)
+        query = st.text_input("Enter your query")
+        
+        if st.button("Ask"):
+            answer = query_openai_api(query, full_text)
+            st.write("Answer:", answer)
+
+if __name__ == "__main__":
+    main()
